@@ -15,7 +15,7 @@
 #include "list.h"
 #include "protocol.h"
 
-#define MAX_CHUNK 10
+#define MAX_CHUNK 1000
 #define AJAXER_DIR "/tmp/ajax"
 
 #define MSG_TIMEOUT 12333
@@ -65,14 +65,19 @@ static struct task* spawn_task(const char *cmd) {
 		int len = strlen(cmd); 
 		real_cmd = malloc(len + 64); 
 		//free(task); /* we won't need it */
-		snprintf(real_cmd, len+64, "%s > /tmp/ajax/%d.out", cmd, 
-			 getpid()); 
 		/* ok we're now in the child process */
 		/* nuke all fds */
 		for(i=0; i < 1024; i++)
 			close(i); 
-		system(real_cmd); 
 
+		snprintf(real_cmd, len+64, "/bin/sh -c '%s' > /tmp/ajax/%d.out",  
+			 cmd, getpid()); 
+#if 0
+		open("/dev/null", O_RDONLY); /* stdin */
+		open(real_cmd, O_CREAT|O_WRONLY); /*?*/
+		open("/dev/zero", O_RDONLY); /* stdin */
+#endif
+		system(real_cmd); 
 		exit(0); 
 	}
 	printf("task pid %d\n", task->pid); 
@@ -160,17 +165,18 @@ void handle_timeout(void) {
 		task = container_of(le, struct task, n); 
 		pid = task->pid;
 		if((tv.tv_sec-task->lastpoll) > TIMEOUT) { 
-			struct list_elem *tmp;
+			//struct list_elem *tmp;
 			printf("Time to whack him\n");
 			LIST_REMOVE_ELEM(task_list, le); 
 			snprintf(fil, 256, AJAXER_DIR "/%d.out", task->pid);
 			/* Nobodys watching so clean out */
 			kill(pid, SIGKILL);
 			unlink(fil);
-			tmp = le;
+			//tmp = le;
 			/* dump the memory */
-			free(tmp);
-			le = le->prev;
+			//free(tmp);
+			/* not safe to do this */
+			//le = le->prev;
 			if(!le)
 				break;
 		}
@@ -226,7 +232,6 @@ int main(void) {
 			continue;
 		if(len <= 0)
 			break;
-		printf("got message!\n");
 		switch(msg->cmd) {
 		case MSG_EXEC:
 		{
