@@ -1,18 +1,20 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#define _GNU_SOURCE
 #include <unistd.h>
-#include <sys/socket.h>
+#include <pthread.h>
 #include <syslog.h>
 #include <string.h>
-#include <netinet/in.h>
-#include <fcntl.h>
-#include <sys/stat.h>
 #include <signal.h>
+#include <fcntl.h>
+
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/time.h>
 #include <sys/wait.h>
-#include <pthread.h>
+
+#include <netinet/in.h>
 
 #include "list.h"
 #include "protocol.h"

@@ -1,13 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
 #include <unistd.h>
-#include <sys/socket.h>
 #include <syslog.h>
 #include <string.h>
-#include <netinet/in.h>
+
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/select.h>
+
+#include <netinet/in.h>
 
 #include "protocol.h"
 
