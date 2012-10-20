@@ -136,7 +136,15 @@ void send_data(struct task *task, int sockfd, struct sockaddr_in *raddr) {
 				sendto(sockfd, msg, sizeof(*msg)+len, 0,
 				       (struct sockaddr*)raddr, sizeof(*raddr)); 
 			}
-			msg->size = len;
+			if(len == -1) {
+				msg->data[0]=0;
+				msg->len=0;
+				len = 0;
+			} else {
+				msg->data[len-1]=0;
+				msg->size = len;
+			}
+
 			msg->more_to_follow = 0;
 			sendto(sockfd, msg, sizeof(*msg)+len, 0,
 			       (struct sockaddr*)raddr, sizeof(*raddr)); 
