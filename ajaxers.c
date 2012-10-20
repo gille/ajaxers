@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <sys/socket.h>
 #include <syslog.h>
@@ -10,6 +11,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <sys/wait.h>
 #include <pthread.h>
 
 #include "list.h"
@@ -25,8 +27,10 @@ struct task {
 	struct list_elem n;
 	pid_t pid;
 	uint32_t id;
+	int pipe_fd[2];
 
 	time_t lastpoll;
+	int state; 
 };
 
 struct list_elem *task_list;
@@ -50,37 +54,43 @@ pid_t lookup_pid(uint32_t id) {
 
 static struct task* spawn_task(const char *cmd) {
 	struct task *task;
+	int on = 1; 
 
 	printf("try to spawn! [%s]\n", cmd);
 	task = malloc(sizeof(*task));
+	task->state = STATE_ALIVE;
 
 	task->lastpoll = time(0);
+	pipe(task->pipe_fd); 
+	fcntl(task->pipe_fd[0], O_NONBLOCK, &on); 
+	fcntl(task->pipe_fd[1], O_NONBLOCK, &on); 
 
 	if((task->pid=fork()) == 0) {
 		int i;
 		char *real_cmd;
 		int len = strlen(cmd); 
+
 		real_cmd = malloc(len + 64); 
 		//free(task); /* we won't need it */
 		/* ok we're now in the child process */
 		/* nuke all fds */
 		for(i=0; i < 1024; i++)
-			close(i); 
+			if(i != task->pipe_fd[1])
+				close(i); 
+		/* not sure if this is really necessary */
+		snprintf(real_cmd, len+64, "/bin/sh -c '%s'",  cmd); 
 
-		snprintf(real_cmd, len+64, "/bin/sh -c '%s' > /tmp/ajax/%d.out",  
-			 cmd, getpid()); 
-#if 0
 		open("/dev/null", O_RDONLY); /* stdin */
-		open(real_cmd, O_CREAT|O_WRONLY); /*?*/
-		open("/dev/zero", O_RDONLY); /* stdin */
-#endif
-		system(cmd); 
+		dup2(task->pipe_fd[1], 1);
+		open("/dev/zero", O_RDONLY); /* stderr */
+
+		system(real_cmd); 
 		exit(0); 
 	}
 	printf("task pid %d\n", task->pid); 
 	task->id = rand();
 	SLIST_INSERT(&task_list, &task->n); 
-	
+
 	return task;
 }
 
@@ -109,48 +119,41 @@ int init_socket() {
 
 void send_data(struct task *task, int sockfd, struct sockaddr_in *raddr) {
 	struct msg *msg;
-	int len; 
-	int fd;
+	int len;
 	char fil[256];
+
 	msg = malloc(sizeof(struct msg) + MAX_CHUNK);
 	memset(msg, 0, sizeof(*msg));
 	msg->cmd = MSG_RESPONSE;
-	
+	msg->state = task->state; 
+
 	if(task == NULL) {
 		sendto(sockfd, msg, sizeof(*msg), 0,
 		       (struct sockaddr*)raddr, sizeof(*raddr)); 
 	} else {
 		task->lastpoll = time(NULL);
 		snprintf(fil, 256, AJAXER_DIR "/%d.out", task->pid);
-		printf("got pid %d try to open %s\n", task->pid, fil); 
-		fd = open(fil, O_RDONLY);
-		if(fd == -1) {
-			perror("open"); 
-			sendto(sockfd, msg, sizeof(*msg), 0,
-			       (struct sockaddr*)raddr, sizeof(*raddr)); 
-		} else {
-			msg->more_to_follow = 1;
-			while((len = read(fd, msg->data, MAX_CHUNK)) == MAX_CHUNK) {
-				msg->data[MAX_CHUNK-1]=0;
-				msg->size = len;
-				sendto(sockfd, msg, sizeof(*msg)+len, 0,
-				       (struct sockaddr*)raddr, sizeof(*raddr)); 
-			}
-			if(len == -1) {
-				msg->data[0]=0;
-				msg->size=0;
-				len = 0;
-			} else {
-				msg->data[len-1]=0;
-				msg->size = len;
-			}
-
-			msg->more_to_follow = 0;
+		
+		msg->more_to_follow = 1;
+		while((len = read(task->pipe_fd[0], msg->data, MAX_CHUNK)) 
+		      == MAX_CHUNK) {
+			msg->data[MAX_CHUNK-1]=0;
+			msg->size = len;
 			sendto(sockfd, msg, sizeof(*msg)+len, 0,
 			       (struct sockaddr*)raddr, sizeof(*raddr)); 
-
-			close(fd);
 		}
+		if(len <= 0) {
+			msg->data[0]=0;
+			msg->size=0;
+			len = 0;
+		} else {
+			msg->data[len-1]=0;
+			msg->size = len;
+		}
+		
+		msg->more_to_follow = 0;
+		sendto(sockfd, msg, sizeof(*msg)+len, 0,
+		       (struct sockaddr*)raddr, sizeof(*raddr)); 
 	}
 }
 
@@ -168,6 +171,8 @@ int handle_timeout(void) {
 	p = &task_list;
 
 	for(le = task_list; le != NULL; le=next) {		
+		int status;
+
 		next = le->next;
 		task = container_of(le, struct task, n); 
 		pid = task->pid;
@@ -178,12 +183,18 @@ int handle_timeout(void) {
 			snprintf(fil, 256, AJAXER_DIR "/%d.out", task->pid);
 			/* Nobodys watching so clean out */
 			kill(pid, SIGKILL);
-			unlink(fil);
+			waitpid(task->pid, &status, WNOHANG); 
 			/* free the memory */
 			free(task);
 		} else {
 			p = &le->next;
 			works++;
+
+			if(waitpid(task->pid, &status, WNOHANG) == task->pid) {
+				/* process went away */
+				SLIST_REMOVE_ELEM(p, le);
+				task->state = STATE_DEAD; 
+			}
 		}
 	}
 	//printf("out of loop\n");
@@ -230,9 +241,9 @@ int main(void) {
 	
 	/* We should have a list of delayed work */
 
-	read(fd, &seed, sizeof(unsigned int));
+	while(read(fd, &seed, sizeof(unsigned int)) != 4);
 	srand(seed); /* FIXME */
-
+	close(fd);
 	msg = malloc(MAX_CHUNK+ sizeof(struct msg));
 	memset(msg, 0, 32);
 	
