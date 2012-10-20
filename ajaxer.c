@@ -42,6 +42,12 @@ void usage(const char *name) {
 }
 
 void htmlize(const char *str) {
+	while(*str != 0) {
+		if(*str == '\n')
+			printf("<br />");
+		printf("%c", *str); 
+		str++;
+	}
 }
 
 int main(int argc, char **argv) {
@@ -114,7 +120,8 @@ int main(int argc, char **argv) {
 			printf("%s", msg->data); 
 			break;
 		default:
-			printf("Don't know what you're talking about.. %d\n", msg->cmd);
+			/* If there's no server we'll get the question sent to us */
+			//printf("Don't know what you're talking about.. %d\n", msg->cmd);
 			break;
 		}
 	}
