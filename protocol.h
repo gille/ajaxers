@@ -25,6 +25,7 @@ struct msg {
 
 #define STATE_ALIVE    0
 #define STATE_DEAD     1
+#define STATE_DONE     2
 
 #define SERVER_PORT 9999
 

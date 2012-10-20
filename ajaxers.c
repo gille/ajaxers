@@ -56,7 +56,7 @@ pid_t lookup_pid(uint32_t id) {
 
 static struct task* spawn_task(const char *cmd) {
 	struct task *task;
-	int on = 1; 
+	int flags;
 
 	printf("try to spawn! [%s]\n", cmd);
 	task = malloc(sizeof(*task));
@@ -66,8 +66,11 @@ static struct task* spawn_task(const char *cmd) {
 
 	task->lastpoll = time(0);
 	pipe(task->pipe_fd); 
-	fcntl(task->pipe_fd[0], O_NONBLOCK, &on); 
-	fcntl(task->pipe_fd[1], O_NONBLOCK, &on); 
+	flags = fcntl(task->pipe_fd[0], F_GETFL, 0);
+	fcntl(task->pipe_fd[0], F_SETFL, flags|O_NONBLOCK);
+
+	flags = fcntl(task->pipe_fd[1], F_GETFL, 0);
+	fcntl(task->pipe_fd[1], F_SETFL, flags|O_NONBLOCK);
 
 	if((task->pid=fork()) == 0) {
 		int i;
@@ -126,12 +129,19 @@ void send_data(struct task *task, int sockfd, const struct sockaddr *raddr) {
 		return;
 	memset(msg, 0, sizeof(*msg));
 	msg->cmd = MSG_RESPONSE;
-	msg->state = task->state; 
 
 	if(task == NULL) {
+		msg->state = STATE_DEAD; /* It might never have existed.. */
 		sendto(sockfd, msg, sizeof(*msg), 0, raddr, sizeof(*raddr)); 
 		return;
 	}
+	msg->state = task->state; 
+	if(task->state == STATE_DONE) {
+		sendto(sockfd, msg, sizeof(*msg), 0, raddr, sizeof(*raddr));
+		/* At this point... we could clean up */
+		return;
+	}
+
 	task->lastpoll = time(NULL);
 	
 	msg->more_to_follow = 1;
@@ -153,6 +163,15 @@ void send_data(struct task *task, int sockfd, const struct sockaddr *raddr) {
 	msg->more_to_follow = 0;
 	sendto(sockfd, msg, sizeof(*msg)+len, 0,
 	       raddr, sizeof(*raddr)); 
+
+	if(task->state == STATE_DEAD) {
+		/* If it's dead there won't be more data at this point */
+		task->state = STATE_DONE;
+	}
+	if(waitpid(task->pid, &status, WNOHANG) == task->pid) {
+		/* He terminated */
+		task->state = STATE_DEAD;
+	}
 }
 
 int handle_timeout(void) {
@@ -182,15 +201,18 @@ int handle_timeout(void) {
 			printf("wait for pid: %d\n", task->pid);
 			waitpid(task->pid, &status, WNOHANG); 
 			printf("status: %d\n", status); 
-			/* free the memory */
+			/* free the memory and fds */
+			close(task->pipe_fd[0]);
+			close(task->pipe_fd[1]);
 			free(task);
 		} else {
 			p = &le->next;
 			works++;
 
 			if(waitpid(task->pid, &status, WNOHANG) == task->pid) {
-				/* process went away */
-				SLIST_REMOVE_ELEM(p, le);
+				/* process went away, don't remove the task 
+				 * pointer. If you do we might lose data
+				 */
 				task->state = STATE_DEAD; 
 			}
 		}
@@ -294,9 +316,11 @@ int main(void) {
 		case MSG_KILL:
 		{
 			pid_t pid = lookup_pid(msg->id);
+			int status;
 			printf("received a KILL cmd\n");
 			if(pid != -1) {
 				kill(pid, SIGKILL); 
+				waitpid(pid, &status, WNOHANG);
 			}
 			break;
 		}
