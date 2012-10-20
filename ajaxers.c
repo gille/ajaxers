@@ -74,7 +74,7 @@ static struct task* spawn_task(const char *cmd) {
 		open(real_cmd, O_CREAT|O_WRONLY); /*?*/
 		open("/dev/zero", O_RDONLY); /* stdin */
 #endif
-		system(real_cmd); 
+		system(cmd); 
 		exit(0); 
 	}
 	printf("task pid %d\n", task->pid); 
@@ -138,7 +138,7 @@ void send_data(struct task *task, int sockfd, struct sockaddr_in *raddr) {
 			}
 			if(len == -1) {
 				msg->data[0]=0;
-				msg->len=0;
+				msg->size=0;
 				len = 0;
 			} else {
 				msg->data[len-1]=0;
@@ -171,7 +171,7 @@ int handle_timeout(void) {
 		next = le->next;
 		task = container_of(le, struct task, n); 
 		pid = task->pid;
-		if((time(0)->lastpoll) > TIMEOUT) { 
+		if((time(0)-task->lastpoll) > TIMEOUT) { 
 			//struct list_elem *tmp;
 			printf("Time to whack him\n");
 			SLIST_REMOVE_ELEM(p, le); 
@@ -225,8 +225,8 @@ int main(void) {
 	int len;
 	int fd = open("/dev/random", O_RDONLY);
 	unsigned int seed; 
-	int works_active = 0;
-	struct list_elem *delayed_work = NULL;
+	//int works_active = 0;
+	//struct list_elem *delayed_work = NULL;
 	
 	/* We should have a list of delayed work */
 
@@ -285,12 +285,15 @@ int main(void) {
 
 		case MSG_TIMEOUT:
 		{
-			works_active = handle_timeout();
+			//works_active = 
+			handle_timeout();
+#if 0
 			while(works < MAX_ACTIVE && !LIST_EMPTY(delayed_work)) {
 				works++;
 				SLIST_REMOVE_HEAD(delayed_work); 
 				
 			}
+#endif
 			break;
 		}
 		default:
