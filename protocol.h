@@ -5,7 +5,7 @@
 
 struct msg {
 	int cmd;
-	uint_32t size;
+	uint32_t size;
 	int more_to_follow;
 	uint32_t id;
 	char data[1];
@@ -14,5 +14,7 @@ struct msg {
 #define MSG_EXEC 1
 #define MSG_GET  2
 #define MSG_KILL 3
+
+#define SERVER_PORT 9999
 
 #endif
