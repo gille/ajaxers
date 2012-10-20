@@ -1,5 +1,5 @@
 CC=$(CROSS_COMPILE)gcc
-CFLAGS=-Wall -Werror
+CFLAGS=-Wall -Werror -O0 -g
 LDFLAGS=-pthread -upthread_create
 
 all: ajaxer ajaxers

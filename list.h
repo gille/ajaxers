@@ -10,16 +10,10 @@ struct list_elem {
 
 #define LIST_INIT(l) do { l = NULL; } while(0)
 
-#define LIST_INSERT_TAIL(l, n) do {				\
-	  (n)->next = NULL;					\
-	  if((l) == NULL) {					\
-	       (l) = n;						\
-	  } else {						\
-	       (l)->prev->next = (n);				\
-	       (n)->prev = (l)->prev;				\
-	  }							\
-	  (l)->prev = (n);					\
-     } while(0)
+#define SLIST_INSERT(l, n) do {				\
+	(n)->next = *l;					\
+	(*l)= (n);					\
+	} while(0)
 
 
 #define LIST_INSERT_HEAD(l,n) do {					\
@@ -31,34 +25,10 @@ struct list_elem {
      (l) = (n);							\
      } while(0)
 
-/* check for NULL? */
-#define LIST_REMOVE_HEAD(l) do {			\
-	  struct list_elem *n=(l);			\
-	  (l) = (l)->next;				\
-	  if((l))					\
-	       (l)->prev=n->prev;			\
-     } while(0)
 
+#define SLIST_REMOVE_ELEM(l, n)			\
+	(*l) = (n)->next
 
-/* FIXME: Implement in a non broken way! */
-#define LIST_REMOVE_ELEM(l, n) do {					\
-	  if((n)->prev != NULL) {					\
-	       (n)->prev->next = (n)->next;				\
-	  }								\
-	  if((n)->next != NULL) {					\
-	       (n)->next->prev = (n)->prev;				\
-	  }								\
-	  if((n)== (l)) {						\
-	       /* first element */					\
-	       (l)=(l)->next;						\
-	  } else							\
-	       if((n) == (l)->prev) {					\
-		    /* last element? */					\
-		    (l)->prev = (l)->prev->prev;			\
-	       }							\
-     } while(0)
-
-#define LIST_GET_HEAD(l) l
 
 #define LIST_PRINT(l) do {						\
 	  struct list_elem *le;					\

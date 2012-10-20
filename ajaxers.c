@@ -82,7 +82,7 @@ static struct task* spawn_task(const char *cmd) {
 	}
 	printf("task pid %d\n", task->pid); 
 	task->id = ii++; 
-	LIST_INSERT_TAIL(task_list, &task->n); 
+	SLIST_INSERT(&task_list, &task->n); 
 	
 	return task;
 }
@@ -151,7 +151,8 @@ void send_data(struct task *task, int sockfd, struct sockaddr_in *raddr) {
 }
 
 void handle_timeout(void) {
-	struct list_elem *le;
+	struct list_elem *le, *next;
+	struct list_elem **p;
 	struct task *task;
 	pid_t pid; 
 	char fil[256];
@@ -161,27 +162,27 @@ void handle_timeout(void) {
 	/* FIXME: 
 	 *   We need to safely iterate this list while removing elements
 	 */
-	for(le = task_list; le != NULL; le=le->next) {
+	p = &task_list;
+
+	for(le = task_list; le != NULL; le=next) {		
+		next = le->next;
 		task = container_of(le, struct task, n); 
 		pid = task->pid;
 		if((tv.tv_sec-task->lastpoll) > TIMEOUT) { 
 			//struct list_elem *tmp;
 			printf("Time to whack him\n");
-			LIST_REMOVE_ELEM(task_list, le); 
+			SLIST_REMOVE_ELEM(p, le); 
 			snprintf(fil, 256, AJAXER_DIR "/%d.out", task->pid);
 			/* Nobodys watching so clean out */
 			kill(pid, SIGKILL);
 			unlink(fil);
-			//tmp = le;
-			/* dump the memory */
-			//free(tmp);
-			/* not safe to do this */
-			//le = le->prev;
-			if(!le)
-				break;
+			/* free the memory */
+			free(task);
+		} else {
+			p = &le->next;
 		}
-
 	}
+	//printf("out of loop\n");
 }
 
 void * timer(void *arg) {
