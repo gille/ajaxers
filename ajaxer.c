@@ -71,8 +71,6 @@ int main(int argc, char **argv) {
 	len = sizeof(*msg);
 	if(strcmp(argv[1], "-e") == 0 ) {
 		cmd = MSG_EXEC;
-		/* FIXME: Optimize this bullshit		  
-		 */
 		for(i=2; i < argc; i++) {
 			strncat(msg->data, argv[i], MAX_CHUNK);
 			strncat(msg->data, " ", MAX_CHUNK); 

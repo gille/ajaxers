@@ -123,6 +123,7 @@ int init_socket(void) {
 void send_data(struct task *task, int sockfd, const struct sockaddr *raddr) {
 	struct msg *msg;
 	int len;
+	int status;
 
 	msg = malloc(sizeof(struct msg) + MAX_CHUNK);
 	if(msg == NULL)
@@ -161,8 +162,7 @@ void send_data(struct task *task, int sockfd, const struct sockaddr *raddr) {
 	}
 	
 	msg->more_to_follow = 0;
-	sendto(sockfd, msg, sizeof(*msg)+len, 0,
-	       raddr, sizeof(*raddr)); 
+	sendto(sockfd, msg, sizeof(*msg)+len, 0, raddr, sizeof(*raddr)); 
 
 	if(task->state == STATE_DEAD) {
 		/* If it's dead there won't be more data at this point */
@@ -287,7 +287,7 @@ int main(void) {
 		case MSG_EXEC:
 		{
 			struct task *task;
-			printf("received an EXEC cmd\n");
+			printf( "received an EXEC cmd\n");
 			if(msg->size < (MAX_CHUNK)) {
 				msg->data[msg->size]=0;
 				task = spawn_task(msg->data);
