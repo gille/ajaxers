@@ -60,6 +60,8 @@ static struct task* spawn_task(const char *cmd) {
 
 	printf("try to spawn! [%s]\n", cmd);
 	task = malloc(sizeof(*task));
+	if(task == NULL)
+		return NULL;
 	task->state = STATE_ALIVE;
 
 	task->lastpoll = time(0);
@@ -69,24 +71,20 @@ static struct task* spawn_task(const char *cmd) {
 
 	if((task->pid=fork()) == 0) {
 		int i;
-		char *real_cmd;
-		int len = strlen(cmd); 
 
-		real_cmd = malloc(len + 64); 
-		//free(task); /* we won't need it */
+		free(task); /* we won't need it */
 		/* ok we're now in the child process */
 		/* nuke all fds */
 		for(i=0; i < 1024; i++)
 			if(i != task->pipe_fd[1])
 				close(i); 
 		/* not sure if this is really necessary */
-		snprintf(real_cmd, len+64, "/bin/sh -c '%s'",  cmd); 
 
 		open("/dev/null", O_RDONLY); /* stdin */
 		dup2(task->pipe_fd[1], 1);
 		open("/dev/zero", O_RDONLY); /* stderr */
 
-		system(real_cmd); 
+		system(cmd); 
 		exit(0); 
 	}
 	printf("task pid %d\n", task->pid); 
@@ -122,40 +120,39 @@ int init_socket(void) {
 void send_data(struct task *task, int sockfd, const struct sockaddr *raddr) {
 	struct msg *msg;
 	int len;
-	char fil[256];
 
 	msg = malloc(sizeof(struct msg) + MAX_CHUNK);
+	if(msg == NULL)
+		return;
 	memset(msg, 0, sizeof(*msg));
 	msg->cmd = MSG_RESPONSE;
 	msg->state = task->state; 
 
 	if(task == NULL) {
 		sendto(sockfd, msg, sizeof(*msg), 0, raddr, sizeof(*raddr)); 
-	} else {
-		task->lastpoll = time(NULL);
-		snprintf(fil, 256, AJAXER_DIR "/%d.out", task->pid);
-		
-		msg->more_to_follow = 1;
-		while((len = read(task->pipe_fd[0], msg->data, MAX_CHUNK)) 
-		      == MAX_CHUNK) {
-			msg->data[MAX_CHUNK-1]=0;
-			msg->size = len;
-			sendto(sockfd, msg, sizeof(*msg)+len, 0,
-			       raddr, sizeof(*raddr)); 
-		}
-		if(len <= 0) {
-			msg->data[0]=0;
-			msg->size=0;
-			len = 0;
-		} else {
-			msg->data[len-1]=0;
-			msg->size = len;
-		}
-		
-		msg->more_to_follow = 0;
+		return;
+	}
+	task->lastpoll = time(NULL);
+	
+	msg->more_to_follow = 1;
+	while((len = read(task->pipe_fd[0], msg->data, MAX_CHUNK)) == MAX_CHUNK) {
+		msg->data[MAX_CHUNK-1]=0;
+		msg->size = len;
 		sendto(sockfd, msg, sizeof(*msg)+len, 0,
 		       raddr, sizeof(*raddr)); 
 	}
+	if(len <= 0) {
+		msg->data[0]=0;
+		msg->size=0;
+		len = 0;
+	} else {
+		msg->data[len-1]=0;
+		msg->size = len;
+	}
+	
+	msg->more_to_follow = 0;
+	sendto(sockfd, msg, sizeof(*msg)+len, 0,
+	       raddr, sizeof(*raddr)); 
 }
 
 int handle_timeout(void) {
@@ -163,7 +160,6 @@ int handle_timeout(void) {
 	struct list_elem **p;
 	struct task *task;
 	pid_t pid; 
-	char fil[256];
 	int works = 0;
 
 	/* FIXME: 
@@ -181,10 +177,11 @@ int handle_timeout(void) {
 			//struct list_elem *tmp;
 			printf("Time to whack him\n");
 			SLIST_REMOVE_ELEM(p, le); 
-			snprintf(fil, 256, AJAXER_DIR "/%d.out", task->pid);
 			/* Nobodys watching so clean out */
 			kill(pid, SIGKILL);
+			printf("wait for pid: %d\n", task->pid);
 			waitpid(task->pid, &status, WNOHANG); 
+			printf("status: %d\n", status); 
 			/* free the memory */
 			free(task);
 		} else {
@@ -246,6 +243,10 @@ int main(void) {
 	srand(seed); /* FIXME */
 	close(fd);
 	msg = malloc(MAX_CHUNK+ sizeof(struct msg));
+	if(msg == NULL) {
+		printf("Unable to allocate memory, goodbye\n");
+		return 1;
+	}
 	memset(msg, 0, 32);
 	
 	/* holy muppet we must change this to a select */
@@ -268,7 +269,11 @@ int main(void) {
 			if(msg->size < (MAX_CHUNK)) {
 				msg->data[msg->size]=0;
 				task = spawn_task(msg->data);
-				msg->id = task->id;
+				if(task == NULL) {
+					msg->id = -1;
+				} else {
+					msg->id = task->id;
+				}
 				msg->size = 0;
 				msg->cmd = MSG_EXECD;
 				sendto(sockfd, msg, sizeof(*msg), 0,
