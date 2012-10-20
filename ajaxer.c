@@ -103,7 +103,8 @@ int main(int argc, char **argv) {
 	tv.tv_usec = 0;
 	tv.tv_sec = 3; 
 	if(select(sockfd+1, &rset, NULL, NULL, &tv) == 1) {
-		/* Interesting, if we send and nobody listens we get it back? */
+		/* Interesting, if we send and nobody listens we get it back? 
+		 */
 		recv(sockfd, msg, MAX_CHUNK, 0);
 		
 		switch(msg->cmd) {

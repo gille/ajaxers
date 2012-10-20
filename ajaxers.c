@@ -96,9 +96,9 @@ static struct task* spawn_task(const char *cmd) {
 	return task;
 }
 
-int recv_msg(int sockfd, struct msg *msg, int size, struct sockaddr_in *raddr) {
+int recv_msg(int sockfd, struct msg *msg, int size, struct sockaddr *raddr) {
 	unsigned int siz = sizeof(*raddr);
-	return recvfrom(sockfd, msg, size, 0, (struct sockaddr*)raddr, &siz);
+	return recvfrom(sockfd, msg, size, 0, raddr, &siz);
 }
 
 int init_socket(void) {
@@ -119,7 +119,7 @@ int init_socket(void) {
 	return sockfd;
 }
 
-void send_data(struct task *task, int sockfd, const struct sockaddr_in *raddr) {
+void send_data(struct task *task, int sockfd, const struct sockaddr *raddr) {
 	struct msg *msg;
 	int len;
 	char fil[256];
@@ -130,8 +130,7 @@ void send_data(struct task *task, int sockfd, const struct sockaddr_in *raddr) {
 	msg->state = task->state; 
 
 	if(task == NULL) {
-		sendto(sockfd, msg, sizeof(*msg), 0,
-		       (struct sockaddr*)raddr, sizeof(*raddr)); 
+		sendto(sockfd, msg, sizeof(*msg), 0, raddr, sizeof(*raddr)); 
 	} else {
 		task->lastpoll = time(NULL);
 		snprintf(fil, 256, AJAXER_DIR "/%d.out", task->pid);
@@ -142,7 +141,7 @@ void send_data(struct task *task, int sockfd, const struct sockaddr_in *raddr) {
 			msg->data[MAX_CHUNK-1]=0;
 			msg->size = len;
 			sendto(sockfd, msg, sizeof(*msg)+len, 0,
-			       (struct sockaddr*)raddr, sizeof(*raddr)); 
+			       raddr, sizeof(*raddr)); 
 		}
 		if(len <= 0) {
 			msg->data[0]=0;
@@ -155,7 +154,7 @@ void send_data(struct task *task, int sockfd, const struct sockaddr_in *raddr) {
 		
 		msg->more_to_follow = 0;
 		sendto(sockfd, msg, sizeof(*msg)+len, 0,
-		       (struct sockaddr*)raddr, sizeof(*raddr)); 
+		       raddr, sizeof(*raddr)); 
 	}
 }
 
@@ -253,7 +252,8 @@ int main(void) {
 	printf("get ready!\n");
 	pthread_create(&pt, NULL, timer, NULL);
 	while(1) {
-		len = recv_msg(sockfd, msg, MAX_CHUNK+sizeof(struct msg), &raddr);
+		len = recv_msg(sockfd, msg, MAX_CHUNK+sizeof(struct msg), 
+			       (struct sockaddr*)&raddr);
 		if(len < sizeof(struct msg))
 			continue;
 		if(len < msg->size)
@@ -281,7 +281,7 @@ int main(void) {
 		{
 			struct task *task = lookup(msg->id);
 			printf("received a GET cmd\n");
-			send_data(task, sockfd, &raddr); 
+			send_data(task, sockfd, (struct sockaddr*)&raddr); 
 				
 			break;
 		}
