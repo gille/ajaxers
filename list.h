@@ -30,6 +30,11 @@ struct list_elem {
 	(*l) = (n)->next
 
 
+
+#define SLIST_REMOVE_HEAD(l)			\
+	(l) = (l)->next
+
+#define SLIST_EMPTY(l) (l == NULL)
 #define LIST_PRINT(l) do {						\
 	  struct list_elem *le;					\
 	  printf("[%s:%d]list:%s\nhead %p tail %p\n",		\

@@ -50,14 +50,11 @@ pid_t lookup_pid(uint32_t id) {
 
 static struct task* spawn_task(const char *cmd) {
 	struct task *task;
-	static int ii = 12345;
-	struct timeval tv; 
 
 	printf("try to spawn! [%s]\n", cmd);
 	task = malloc(sizeof(*task));
 
-	gettimeofday(&tv, NULL);
-	task->lastpoll = tv.tv_sec; 
+	task->lastpoll = time(0);
 
 	if((task->pid=fork()) == 0) {
 		int i;
@@ -81,7 +78,7 @@ static struct task* spawn_task(const char *cmd) {
 		exit(0); 
 	}
 	printf("task pid %d\n", task->pid); 
-	task->id = ii++; 
+	task->id = rand();
 	SLIST_INSERT(&task_list, &task->n); 
 	
 	return task;
@@ -123,6 +120,7 @@ void send_data(struct task *task, int sockfd, struct sockaddr_in *raddr) {
 		sendto(sockfd, msg, sizeof(*msg), 0,
 		       (struct sockaddr*)raddr, sizeof(*raddr)); 
 	} else {
+		task->lastpoll = time(NULL);
 		snprintf(fil, 256, AJAXER_DIR "/%d.out", task->pid);
 		printf("got pid %d try to open %s\n", task->pid, fil); 
 		fd = open(fil, O_RDONLY);
@@ -138,8 +136,6 @@ void send_data(struct task *task, int sockfd, struct sockaddr_in *raddr) {
 				sendto(sockfd, msg, sizeof(*msg)+len, 0,
 				       (struct sockaddr*)raddr, sizeof(*raddr)); 
 			}
-			printf("%s\n\n\n", msg->data);
-			printf("out of read; %d\n", len); 
 			msg->size = len;
 			msg->more_to_follow = 0;
 			sendto(sockfd, msg, sizeof(*msg)+len, 0,
@@ -150,14 +146,13 @@ void send_data(struct task *task, int sockfd, struct sockaddr_in *raddr) {
 	}
 }
 
-void handle_timeout(void) {
+int handle_timeout(void) {
 	struct list_elem *le, *next;
 	struct list_elem **p;
 	struct task *task;
 	pid_t pid; 
 	char fil[256];
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
+	int works = 0;
 
 	/* FIXME: 
 	 *   We need to safely iterate this list while removing elements
@@ -168,7 +163,7 @@ void handle_timeout(void) {
 		next = le->next;
 		task = container_of(le, struct task, n); 
 		pid = task->pid;
-		if((tv.tv_sec-task->lastpoll) > TIMEOUT) { 
+		if((time(0)->lastpoll) > TIMEOUT) { 
 			//struct list_elem *tmp;
 			printf("Time to whack him\n");
 			SLIST_REMOVE_ELEM(p, le); 
@@ -180,9 +175,11 @@ void handle_timeout(void) {
 			free(task);
 		} else {
 			p = &le->next;
+			works++;
 		}
 	}
 	//printf("out of loop\n");
+	return works;
 }
 
 void * timer(void *arg) {
@@ -218,6 +215,15 @@ int main(void) {
 	struct sockaddr_in raddr;
 	pthread_t pt;
 	int len;
+	int fd = open("/dev/random", O_RDONLY);
+	unsigned int seed; 
+	int works_active = 0;
+	struct list_elem *delayed_work = NULL;
+	
+	/* We should have a list of delayed work */
+
+	read(fd, &seed, sizeof(unsigned int));
+	srand(seed); /* FIXME */
 
 	msg = malloc(MAX_CHUNK+ sizeof(struct msg));
 	memset(msg, 0, 32);
@@ -254,12 +260,6 @@ int main(void) {
 		{
 			struct task *task = lookup(msg->id);
 			printf("received a GET cmd\n");
-			printf("found %p\n", task); 
-			if(task != NULL) {
-				struct timeval tv; 
-				gettimeofday(&tv, NULL);
-				task->lastpoll = tv.tv_sec; 
-			}
 			send_data(task, sockfd, &raddr); 
 				
 			break;
@@ -277,7 +277,12 @@ int main(void) {
 
 		case MSG_TIMEOUT:
 		{
-			handle_timeout();
+			works_active = handle_timeout();
+			while(works < MAX_ACTIVE && !LIST_EMPTY(delayed_work)) {
+				works++;
+				SLIST_REMOVE_HEAD(delayed_work); 
+				
+			}
 			break;
 		}
 		default:
