@@ -96,12 +96,12 @@ static struct task* spawn_task(const char *cmd) {
 	return task;
 }
 
-int recv_msg(int sockfd, struct msg *msg, int size, struct sockaddr_in *raddr) {
+int recv_msg(int sockfd, const struct msg *msg, int size, const struct sockaddr_in *raddr) {
 	unsigned int siz = sizeof(*raddr);
 	return recvfrom(sockfd, msg, size, 0, (struct sockaddr*)raddr, &siz);
 }
 
-int init_socket() {
+int init_socket(void) {
 	int sockfd;
 	struct sockaddr_in saddr;
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -119,7 +119,7 @@ int init_socket() {
 	return sockfd;
 }
 
-void send_data(struct task *task, int sockfd, struct sockaddr_in *raddr) {
+void send_data(const struct task *task, int sockfd, const struct sockaddr_in *raddr) {
 	struct msg *msg;
 	int len;
 	char fil[256];

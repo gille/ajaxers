@@ -35,10 +35,13 @@ int init_socket(void) {
 	return sockfd;
 }
 
-void usage(char *name) {
+void usage(const char *name) {
 	printf("%s usage:\n"
 	       "%s [-e cmd]|[-g id]|[-k id]\n", name, name);
 	exit(-1);
+}
+
+void htmlize(const char *str) {
 }
 
 int main(int argc, char **argv) {
