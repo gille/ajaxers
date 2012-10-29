@@ -191,6 +191,7 @@ void send_data(struct task *task, int sockfd, const struct sockaddr *raddr) {
 		printf("We determined he died\n"); 
 		task->state = STATE_DEAD;
 	}	
+	free(msg); 
 }
 
 int handle_timeout(void) {
@@ -354,15 +355,7 @@ int main(int argc, char **argv) {
 
 		case MSG_TIMEOUT:
 		{
-			//works_active = 
 			handle_timeout();
-#if 0
-			while(works < MAX_ACTIVE && !LIST_EMPTY(delayed_work)) {
-				works++;
-				SLIST_REMOVE_HEAD(delayed_work); 
-				
-			}
-#endif
 			break;
 		}
 		default:
@@ -372,6 +365,6 @@ int main(int argc, char **argv) {
 		}
 		memset(msg, 0, 32);       
 	}
-
+	free(msg);
 	return 0;
 }
