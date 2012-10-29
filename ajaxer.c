@@ -13,7 +13,7 @@
 
 #include "protocol.h"
 
-#define MAX_CHUNK 1000
+#define MAX_CHUNK 10000
 
 #define printd(fmt, args...) 
 
@@ -51,7 +51,6 @@ void htmlize(const char *str) {
 }
 
 int main(int argc, char **argv) {
-	/* lets spawn an ls */
 	int sockfd = init_socket();
 	struct msg *msg;
 	int i;
@@ -107,16 +106,25 @@ int main(int argc, char **argv) {
 		
 		switch(msg->cmd) {
 		case MSG_EXECD:
-			printf("Spawned work id; %d\n", msg->id); 
+			printf("ajaxer_work_spawn=%d\n", msg->id); 
 			break;
 			
 		case MSG_RESPONSE: 
 			while(msg->more_to_follow) {
+#if 0
+				if(msg->size != strlen(msg->data)) {
+					printf("error: size unmatched\n");
+				}
+#endif
 				if(msg->size < MAX_CHUNK)
 					printf("%s", msg->data); 
-				recv(sockfd, msg, MAX_CHUNK, 0);
+				/* FIXME: we should validate that the length isn't broken */
+				if(recv(sockfd, msg, MAX_CHUNK, 0) == -1)
+					return 0;
 			}
 			printf("%s", msg->data); 
+			if(msg->state == STATE_DONE)
+			    return 1;
 			break;
 		default:
 			/* If there's no server we'll get the question sent to us */
@@ -124,5 +132,6 @@ int main(int argc, char **argv) {
 			break;
 		}
 	}
+	/* out with no data */
 	return 0;
 }

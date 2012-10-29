@@ -14,3 +14,8 @@ ajaxers: ajaxers.o
 
 %.o: protocol.h
 
+romfs:
+	$(STRIP) ajaxer
+	$(STRIP) ajaxers
+	$(ROMFSINST) ajaxer /usr/local/bin/ajaxer
+	$(ROMFSINST) ajaxers /usr/local/bin/ajaxers
